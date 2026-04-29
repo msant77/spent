@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# spent — append per-folder time-tracking entries to CSV log files
+# Bash 3.2 compatible. macOS-only (uses BSD `date -j`).
+set -euo pipefail
+
+PROG="$(basename "$0")"
+ALLOWED_TYPES="dev test plan call prompt message other"
+HEADER='duration,type,ref,message,start,end'
+
+usage() {
+    cat >&2 <<EOF
+Usage: $PROG <duration> [-t TYPE] [#REF|!REF] [-m MESSAGE] [-st "DD-MM-YY HH:MM"] [-et "DD-MM-YY HH:MM"]
+
+Append a time-tracking entry to ./.spent-MM-YYYY.log in the current folder.
+
+Arguments:
+  <duration>             required; format 2h | 30m | 4h30m | 90m
+  -t TYPE                one of: $ALLOWED_TYPES
+  #N or !N               issue (#) or merge-request (!) reference
+  -m MESSAGE             free-text note
+  -st "DD-MM-YY HH:MM"   start time
+  -et "DD-MM-YY HH:MM"   end time
+
+Defaults when -st/-et omitted:
+  neither: st = now - duration, et = now
+  -st only: et = st + duration
+  -et only: st = et - duration
+  both:    used as-is
+EOF
+}
+
+die() {
+    printf '%s: %s\n' "$PROG" "$1" >&2
+    exit "${2:-2}"
+}
+
+parse_duration() {
+    local input="$1"
+    if [[ ! "$input" =~ ^([0-9]+h)?([0-9]+m)?$ ]]; then
+        return 1
+    fi
+    local h_part="${BASH_REMATCH[1]}"
+    local m_part="${BASH_REMATCH[2]}"
+    if [[ -z "$h_part" && -z "$m_part" ]]; then
+        return 1
+    fi
+    local hours="${h_part%h}"
+    local minutes="${m_part%m}"
+    hours="${hours:-0}"
+    minutes="${minutes:-0}"
+    echo $(( hours * 3600 + minutes * 60 ))
+}
+
+parse_datetime() {
+    date -j -f '%d-%m-%y %H:%M' "$1" +%s 2>/dev/null || return 1
+}
+
+format_datetime() {
+    date -j -f '%s' "$1" '+%d-%m-%y %H:%M'
+}
+
+format_period() {
+    date -j -f '%s' "$1" '+%m-%Y'
+}
+
+validate_type() {
+    local t="$1" allowed
+    for allowed in $ALLOWED_TYPES; do
+        if [[ "$t" == "$allowed" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+csv_field() {
+    local s="$1" escaped
+    escaped=$(printf '%s' "$s" | sed 's/"/""/g')
+    printf '"%s"' "$escaped"
+}
+
+main() {
+    if [[ $# -eq 0 ]]; then
+        usage
+        exit 2
+    fi
+
+    local duration_arg=""
+    local type_arg=""
+    local ref_arg=""
+    local message_arg=""
+    local st_arg=""
+    local et_arg=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            -t)
+                shift
+                [[ $# -gt 0 ]] || die "missing value for -t"
+                type_arg="$1"
+                shift
+                ;;
+            -m)
+                shift
+                [[ $# -gt 0 ]] || die "missing value for -m"
+                message_arg="$1"
+                shift
+                ;;
+            -st)
+                shift
+                [[ $# -gt 0 ]] || die "missing value for -st"
+                st_arg="$1"
+                shift
+                ;;
+            -et)
+                shift
+                [[ $# -gt 0 ]] || die "missing value for -et"
+                et_arg="$1"
+                shift
+                ;;
+            -*)
+                die "unknown flag: $1"
+                ;;
+            \#*|\!*)
+                if [[ ! "$1" =~ ^[#!][0-9]+$ ]]; then
+                    die "invalid ref: $1 (expected #N or !N)"
+                fi
+                [[ -z "$ref_arg" ]] || die "ref already set: $ref_arg"
+                ref_arg="$1"
+                shift
+                ;;
+            *)
+                if [[ -z "$duration_arg" ]]; then
+                    duration_arg="$1"
+                else
+                    die "unexpected argument: $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    [[ -n "$duration_arg" ]] || { usage; exit 2; }
+
+    local duration_sec
+    duration_sec=$(parse_duration "$duration_arg") || die "invalid duration: $duration_arg"
+
+    if [[ -n "$type_arg" ]]; then
+        validate_type "$type_arg" || die "invalid type: $type_arg (allowed: $ALLOWED_TYPES)"
+    fi
+
+    local st_epoch="" et_epoch=""
+    if [[ -n "$st_arg" ]]; then
+        st_epoch=$(parse_datetime "$st_arg") || die "invalid start time: $st_arg"
+    fi
+    if [[ -n "$et_arg" ]]; then
+        et_epoch=$(parse_datetime "$et_arg") || die "invalid end time: $et_arg"
+    fi
+
+    local now
+    now=$(date +%s)
+
+    if [[ -z "$st_epoch" && -z "$et_epoch" ]]; then
+        et_epoch="$now"
+        st_epoch=$(( now - duration_sec ))
+    elif [[ -n "$st_epoch" && -z "$et_epoch" ]]; then
+        et_epoch=$(( st_epoch + duration_sec ))
+    elif [[ -z "$st_epoch" && -n "$et_epoch" ]]; then
+        st_epoch=$(( et_epoch - duration_sec ))
+    fi
+
+    local st_disp et_disp period file
+    st_disp=$(format_datetime "$st_epoch")
+    et_disp=$(format_datetime "$et_epoch")
+    period=$(format_period "$st_epoch")
+    file=".spent-${period}.log"
+
+    if [[ ! -s "$file" ]]; then
+        printf '%s\n' "$HEADER" > "$file" || die "cannot create $file" 1
+    fi
+
+    local row
+    row=$(printf '%s,%s,%s,%s,%s,%s' \
+        "$(csv_field "$duration_arg")" \
+        "$(csv_field "$type_arg")" \
+        "$(csv_field "$ref_arg")" \
+        "$(csv_field "$message_arg")" \
+        "$(csv_field "$st_disp")" \
+        "$(csv_field "$et_disp")")
+
+    printf '%s\n' "$row" >> "$file" || die "cannot append to $file" 1
+
+    printf 'appended -> ./%s\n' "$file" >&2
+}
+
+main "$@"
