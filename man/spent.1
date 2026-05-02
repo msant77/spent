@@ -1,0 +1,145 @@
+.Dd May 2, 2026
+.Dt SPENT 1
+.Os
+.Sh NAME
+.Nm spent
+.Nd append per-folder time-tracking entries to a CSV log
+.Sh SYNOPSIS
+.Nm
+.Ar duration
+.Op Fl t Ar type
+.Op Ar "#REF | !REF"
+.Op Fl m Ar message
+.Op Fl st Ar "DD-MM-YY HH:MM"
+.Op Fl et Ar "DD-MM-YY HH:MM"
+.Sh DESCRIPTION
+The
+.Nm
+utility appends a single time-tracking entry to a CSV log file in the
+current working directory.
+The log file is named
+.Pa .spent-MM-YYYY.log
+and is partitioned by the entry's start month, so logs from different
+folders never collide and a fresh file is opened each calendar month.
+.Pp
+Each row contains six always-quoted fields (RFC 4180):
+.Bl -tag -width "duration" -compact
+.It duration
+The duration argument exactly as written.
+.It type
+One of the allowed types, or empty.
+.It ref
+The issue or merge-request reference, or empty.
+.It message
+The free-text note, or empty.
+.It start
+Start time formatted
+.Sy DD-MM-YY HH:MM .
+.It end
+End time formatted
+.Sy DD-MM-YY HH:MM .
+.El
+.Sh ARGUMENTS
+.Bl -tag -width "-st DD-MM-YY HH:MM"
+.It Ar duration
+Required.
+Format
+.Sy 2h ,
+.Sy 30m ,
+.Sy 4h30m ,
+or
+.Sy 90m .
+At least one of the hours or minutes components must be present;
+bare numbers are rejected.
+.It Fl t Ar type
+Optional.
+One of:
+.Sy dev ,
+.Sy test ,
+.Sy plan ,
+.Sy call ,
+.Sy prompt ,
+.Sy message ,
+.Sy other .
+.It Ar #N | !N
+Optional positional reference, e.g.\&
+.Sy #42
+for an issue or
+.Sy !100
+for a merge-request.
+The token is stored verbatim, including the leading sigil.
+.It Fl m Ar message
+Optional free-text note.
+Commas, double quotes and other punctuation are escaped automatically
+per RFC 4180.
+.It Fl st Ar "DD-MM-YY HH:MM"
+Optional start time.
+.It Fl et Ar "DD-MM-YY HH:MM"
+Optional end time.
+.El
+.Sh TIME DEFAULTS
+When
+.Fl st
+or
+.Fl et
+are omitted, the missing values are computed:
+.Bl -tag -width "-st only " -compact
+.It neither
+.Va st = now - duration ,
+.Va et = now
+.It Fl st only
+.Va et = st + duration
+.It Fl et only
+.Va st = et - duration
+.It both
+used as-is; the duration argument becomes a display label and is not
+checked against the explicit window
+.El
+.Sh OUTPUT
+The CSV header line
+.Pp
+.Dl duration,type,ref,message,start,end
+.Pp
+is written exactly once, when the target file is first created.
+Each invocation appends one row.
+A success message is printed to standard error.
+.Sh FILES
+.Bl -tag -width Ds
+.It Pa ./.spent-MM-YYYY.log
+Per-folder, per-month CSV log written in the current working directory.
+.El
+.Sh EXIT STATUS
+.Bl -tag -width Ds
+.It 0
+Entry appended successfully.
+.It 1
+Filesystem error (cannot create or append to the log file).
+.It 2
+Usage error (missing or invalid arguments).
+.El
+.Sh EXAMPLES
+Two hours of dev work on issue #42:
+.Pp
+.Dl spent 2h -t dev #42 -m "fix CSV escaping"
+.Pp
+A 30-minute planning session, no reference:
+.Pp
+.Dl spent 30m -t plan -m "scope review"
+.Pp
+A one-hour call with explicit start and end:
+.Pp
+.Dl spent 1h -st "29-04-26 09:00" -et "29-04-26 10:00" -t call -m "kickoff"
+.Pp
+A short note with punctuation in the message:
+.Pp
+.Dl spent 5m -m 'note with comma, and quote'
+.Sh COMPATIBILITY
+Bash 3.2 compatible.
+macOS-only: uses BSD
+.Xr date 1
+.Fl j Fl f
+parsing.
+.Sh SEE ALSO
+.Xr date 1
+.Sh AUTHORS
+.An Marco Santana
