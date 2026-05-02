@@ -202,3 +202,27 @@ teardown() {
     run "$SPENT_BIN" -h
     [ "$status" -eq 0 ]
 }
+
+# --- man page ---------------------------------------------------------------
+
+@test "man page passes mandoc lint" {
+    if ! command -v mandoc >/dev/null; then
+        skip "mandoc not installed"
+    fi
+    run mandoc -Tlint "$BATS_TEST_DIRNAME/../man/spent.1"
+    [ "$status" -eq 0 ]
+}
+
+@test "man page renders all major sections" {
+    if ! command -v mandoc >/dev/null; then
+        skip "mandoc not installed"
+    fi
+    rendered=$(mandoc -Tutf8 "$BATS_TEST_DIRNAME/../man/spent.1" 2>/dev/null | col -b)
+    [[ "$rendered" == *"SPENT(1)"* ]]
+    [[ "$rendered" == *"NAME"* ]]
+    [[ "$rendered" == *"SYNOPSIS"* ]]
+    [[ "$rendered" == *"DESCRIPTION"* ]]
+    [[ "$rendered" == *"EXAMPLES"* ]]
+    [[ "$rendered" == *"FILES"* ]]
+    [[ "$rendered" == *"EXIT STATUS"* ]]
+}
