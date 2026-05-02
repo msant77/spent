@@ -41,7 +41,11 @@ spent 5m -m 'note with "quotes" and, commas'
 ./install.sh
 ```
 
-Symlinks `spent` to `~/.local/bin/spent`. If that's not on your `PATH`, the script tells you the line to add to `~/.zshrc`.
+Symlinks:
+- `spent` → `~/.local/bin/spent`
+- `man/spent.1` → `~/.local/share/man/man1/spent.1`
+
+If those directories are not on your `PATH` / `MANPATH`, the script prints the line to add to `~/.zshrc`. After install, `man spent` opens the manual.
 
 ## Output format
 
