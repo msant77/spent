@@ -133,6 +133,20 @@ descending month tabs (`Mai 2026`, `Abr 2026`, …), a `Total no mês` line, and
 table per month with columns *Início*, *Dur.*, *Tipo*, *Ref.*, *Descrição*. The
 layout is mobile-friendly and adapts to dark mode via `prefers-color-scheme`.
 
+### Security posture
+
+- Reports are **plain-public** — anyone with the URL sees every entry. Re-read
+  message text for confidential leaks before sharing the URL.
+- The slug must match `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, validated after the
+  prompt — defends against typos and path traversal.
+- Config files (`~/.config/spent/site.conf`, `./.spent-config`) hold only
+  routing info; **no credentials**. Wrangler manages its own session.
+- Values are bash-escaped on write so awkward characters (`"`, `\`, `$`,
+  backtick) round-trip cleanly through `source`.
+- The customer page ships a `Content-Security-Policy` of `default-src 'self'`
+  with `form-action 'none'`, `frame-ancestors 'none'`, and
+  `referrer = no-referrer`.
+
 ## Roadmap
 
 - v1   (shipped): append-only logger
