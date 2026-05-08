@@ -127,9 +127,15 @@ The page fetches `months.json` on load and a per-month `<YYYY-MM>.json` when
 the visitor picks a tab. The static template stays in place — only the JSON
 files change between pushes.
 
+The bundled template (`template/index.html`) is a single self-contained file:
+no build step, no CDN, no framework. It renders the title `<Client> · Relatório de Horas`,
+descending month tabs (`Mai 2026`, `Abr 2026`, …), a `Total no mês` line, and a
+table per month with columns *Início*, *Dur.*, *Tipo*, *Ref.*, *Descrição*. The
+layout is mobile-friendly and adapts to dark mode via `prefers-color-scheme`.
+
 ## Roadmap
 
 - v1   (shipped): append-only logger
 - v1.1 (shipped): `spent config` — per-folder publishing setup
 - v1.2 (shipped): `spent push` — publish/refresh hours JSONs to Cloudflare Pages
-- v1.3 (next):    polished customer-facing report page
+- v1.3 (shipped): polished customer-facing report page
