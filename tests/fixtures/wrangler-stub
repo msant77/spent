@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Test stub that pretends to be wrangler. Records args to $WRANGLER_LOG.
+# - "whoami" -> exit 0 (so require_wrangler passes)
+# - anything else -> append args to log, exit 0
+set -u
+case "${1:-}" in
+    whoami)
+        printf 'stub@example.com\n'
+        exit 0
+        ;;
+    *)
+        if [[ -n "${WRANGLER_LOG:-}" ]]; then
+            printf '%s\n' "$*" >> "$WRANGLER_LOG"
+        fi
+        exit 0
+        ;;
+esac
