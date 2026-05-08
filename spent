@@ -10,6 +10,43 @@ HEADER='duration,type,ref,message,start,end'
 SPENT_GLOBAL_CONFIG="${SPENT_GLOBAL_CONFIG:-$HOME/.config/spent/site.conf}"
 SPENT_LOCAL_CONFIG=".spent-config"
 
+spent_home() {
+    local self="$0"
+    while [[ -L "$self" ]]; do
+        local target
+        target=$(readlink "$self")
+        case "$target" in
+            /*) self="$target" ;;
+            *)  self="$(dirname "$self")/$target" ;;
+        esac
+    done
+    cd "$(dirname "$self")" && pwd -P
+}
+
+spent_template_path() {
+    if [[ -n "${SPENT_TEMPLATE_DIR:-}" ]]; then
+        printf '%s' "$SPENT_TEMPLATE_DIR"
+        return
+    fi
+    local home
+    home=$(spent_home)
+    if [[ -d "$home/template" ]]; then
+        printf '%s' "$home/template"
+        return
+    fi
+    printf '%s' "$HOME/.local/share/spent/template"
+}
+
+json_escape_string() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\t'/\\t}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    printf '%s' "$s"
+}
+
 usage() {
     cat >&2 <<EOF
 Usage: $PROG <duration> [-t TYPE] [#REF|!REF] [-m MESSAGE] [-st "DD-MM-YY HH:MM"] [-et "DD-MM-YY HH:MM"]
@@ -328,7 +365,53 @@ config_setup() {
         "SPENT_SLUG=\"$in_slug\""
     printf 'wrote ./%s\n' "$SPENT_LOCAL_CONFIG" >&2
 
-    printf 'configured. run "spent push" to publish hours -> %s/%s/\n' "$in_dom" "$in_slug" >&2
+    config_initial_deploy "$in_cache" "$in_proj" "$in_slug" "$in_client"
+
+    printf 'configured. live at -> %s/%s/\n' "$in_dom" "$in_slug" >&2
+    printf 'run "spent push" to publish hours.\n' >&2
+}
+
+require_wrangler() {
+    if ! command -v wrangler >/dev/null 2>&1; then
+        printf 'wrangler not installed.\n' >&2
+        printf 'install with: npm install -g wrangler && wrangler login\n' >&2
+        return 1
+    fi
+    if ! wrangler whoami >/dev/null 2>&1; then
+        printf 'wrangler not logged in.\n' >&2
+        printf 'log in with: wrangler login\n' >&2
+        return 1
+    fi
+    return 0
+}
+
+config_initial_deploy() {
+    local cache_dir="$1" project="$2" slug="$3" client="$4"
+
+    local slug_dir="$cache_dir/$slug"
+    mkdir -p "$slug_dir"
+
+    local template
+    template=$(spent_template_path)
+    if [[ -f "$template/index.html" ]]; then
+        cp "$template/index.html" "$slug_dir/index.html"
+    else
+        printf 'template not found at %s — slug will deploy without index.html\n' "$template" >&2
+    fi
+
+    if [[ ! -f "$slug_dir/months.json" ]]; then
+        printf '{"client":"%s","months":[]}\n' "$(json_escape_string "$client")" > "$slug_dir/months.json"
+    fi
+
+    if ! require_wrangler; then
+        printf 'skipping initial deploy. run "spent push" once wrangler is ready.\n' >&2
+        return 0
+    fi
+
+    printf 'deploying initial page to "%s"...\n' "$project" >&2
+    if ! wrangler pages deploy "$cache_dir" --project-name="$project" --branch=main >&2; then
+        die "wrangler pages deploy failed" 1
+    fi
 }
 
 cmd_config() {

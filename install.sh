@@ -11,6 +11,10 @@ MAN_SOURCE="$SCRIPT_DIR/man/spent.1"
 MAN_TARGET_DIR="$HOME/.local/share/man/man1"
 MAN_TARGET="$MAN_TARGET_DIR/spent.1"
 
+TEMPLATE_SOURCE="$SCRIPT_DIR/template"
+TEMPLATE_TARGET_DIR="$HOME/.local/share/spent"
+TEMPLATE_TARGET="$TEMPLATE_TARGET_DIR/template"
+
 if [[ ! -f "$SOURCE" ]]; then
     echo "install.sh: $SOURCE not found" >&2
     exit 1
@@ -33,6 +37,15 @@ if [[ -f "$MAN_SOURCE" ]]; then
     fi
     ln -s "$MAN_SOURCE" "$MAN_TARGET"
     echo "linked $MAN_SOURCE -> $MAN_TARGET"
+fi
+
+if [[ -d "$TEMPLATE_SOURCE" ]]; then
+    mkdir -p "$TEMPLATE_TARGET_DIR"
+    if [[ -L "$TEMPLATE_TARGET" || -e "$TEMPLATE_TARGET" ]]; then
+        rm -rf "$TEMPLATE_TARGET"
+    fi
+    ln -s "$TEMPLATE_SOURCE" "$TEMPLATE_TARGET"
+    echo "linked $TEMPLATE_SOURCE -> $TEMPLATE_TARGET"
 fi
 
 case ":$PATH:" in
