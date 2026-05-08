@@ -10,6 +10,8 @@ HEADER='duration,type,ref,message,start,end'
 usage() {
     cat >&2 <<EOF
 Usage: $PROG <duration> [-t TYPE] [#REF|!REF] [-m MESSAGE] [-st "DD-MM-YY HH:MM"] [-et "DD-MM-YY HH:MM"]
+       $PROG config [show]
+       $PROG push
 
 Append a time-tracking entry to ./.spent-MM-YYYY.log in the current folder.
 
@@ -26,6 +28,10 @@ Defaults when -st/-et omitted:
   -st only: et = st + duration
   -et only: st = et - duration
   both:    used as-is
+
+Subcommands:
+  config [show]   set up publishing for this folder (per-folder + global config)
+  push            publish/refresh the report on Cloudflare Pages
 EOF
 }
 
@@ -79,7 +85,7 @@ csv_field() {
     printf '"%s"' "$escaped"
 }
 
-main() {
+cmd_log() {
     if [[ $# -eq 0 ]]; then
         usage
         exit 2
@@ -195,6 +201,22 @@ main() {
     printf '%s\n' "$row" >> "$file" || die "cannot append to $file" 1
 
     printf 'appended -> ./%s\n' "$file" >&2
+}
+
+cmd_config() {
+    die "spent config: not yet implemented (#3 in progress)" 1
+}
+
+cmd_push() {
+    die "spent push: not yet implemented (#4)" 1
+}
+
+main() {
+    case "${1:-}" in
+        config) shift; cmd_config "$@" ;;
+        push)   shift; cmd_push "$@" ;;
+        *)      cmd_log "$@" ;;
+    esac
 }
 
 main "$@"
