@@ -7,6 +7,9 @@ PROG="$(basename "$0")"
 ALLOWED_TYPES="dev test plan call prompt message other"
 HEADER='duration,type,ref,message,start,end'
 
+SPENT_GLOBAL_CONFIG="${SPENT_GLOBAL_CONFIG:-$HOME/.config/spent/site.conf}"
+SPENT_LOCAL_CONFIG=".spent-config"
+
 usage() {
     cat >&2 <<EOF
 Usage: $PROG <duration> [-t TYPE] [#REF|!REF] [-m MESSAGE] [-st "DD-MM-YY HH:MM"] [-et "DD-MM-YY HH:MM"]
@@ -203,8 +206,148 @@ cmd_log() {
     printf 'appended -> ./%s\n' "$file" >&2
 }
 
+slugify() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+}
+
+capitalize() {
+    local s="$1"
+    if [[ -z "$s" ]]; then
+        return
+    fi
+    local head tail
+    head=$(printf '%s' "$s" | head -c 1 | tr '[:lower:]' '[:upper:]')
+    tail="${s:1}"
+    printf '%s%s' "$head" "$tail"
+}
+
+prompt_with_default() {
+    local question="$1" default="$2" answer
+    if [[ -n "$default" ]]; then
+        printf '%s [%s]: ' "$question" "$default" >&2
+    else
+        printf '%s: ' "$question" >&2
+    fi
+    if ! IFS= read -r answer; then
+        answer=""
+    fi
+    if [[ -z "$answer" ]]; then
+        printf '%s' "$default"
+    else
+        printf '%s' "$answer"
+    fi
+}
+
+write_config_file() {
+    local file="$1"; shift
+    local dir
+    dir=$(dirname "$file")
+    mkdir -p "$dir"
+    (umask 077 && : > "$file")
+    chmod 600 "$file"
+    while [[ $# -gt 0 ]]; do
+        printf '%s\n' "$1" >> "$file"
+        shift
+    done
+}
+
+config_show() {
+    if [[ -f "$SPENT_GLOBAL_CONFIG" ]]; then
+        printf '# global: %s\n' "$SPENT_GLOBAL_CONFIG"
+        cat "$SPENT_GLOBAL_CONFIG"
+        printf '\n'
+    else
+        printf '# global: %s (not set)\n\n' "$SPENT_GLOBAL_CONFIG"
+    fi
+    if [[ -f "$SPENT_LOCAL_CONFIG" ]]; then
+        printf '# local: ./%s\n' "$SPENT_LOCAL_CONFIG"
+        cat "$SPENT_LOCAL_CONFIG"
+    else
+        printf '# local: ./%s (not set)\n' "$SPENT_LOCAL_CONFIG"
+    fi
+}
+
+config_setup() {
+    local reset_site="$1"
+
+    local g_proj="" g_dom="" g_cache=""
+    if [[ -f "$SPENT_GLOBAL_CONFIG" ]]; then
+        # shellcheck disable=SC1090
+        source "$SPENT_GLOBAL_CONFIG"
+        g_proj="${SPENT_PAGES_PROJECT:-}"
+        g_dom="${SPENT_PAGES_DOMAIN:-}"
+        g_cache="${SPENT_CACHE_DIR:-}"
+    fi
+    : "${g_proj:=spent-reports}"
+    : "${g_cache:=$HOME/.local/share/spent/site}"
+
+    local l_client="" l_slug=""
+    if [[ -f "$SPENT_LOCAL_CONFIG" ]]; then
+        # shellcheck disable=SC1090
+        source "$SPENT_LOCAL_CONFIG"
+        l_client="${SPENT_CLIENT_NAME:-}"
+        l_slug="${SPENT_SLUG:-}"
+    fi
+    local folder
+    folder=$(basename "$PWD")
+    : "${l_client:=$(capitalize "$folder")}"
+    : "${l_slug:=$(slugify "$folder")}"
+
+    local in_proj="$g_proj" in_dom="$g_dom" in_cache="$g_cache"
+    local need_global=""
+    if [[ ! -f "$SPENT_GLOBAL_CONFIG" || -n "$reset_site" ]]; then
+        need_global=1
+    fi
+    if [[ -n "$need_global" ]]; then
+        in_proj=$(prompt_with_default "Cloudflare Pages project name" "$g_proj")
+        in_dom=$(prompt_with_default "Public URL base (e.g. https://reports.marcosantana.dev)" "$g_dom")
+        in_cache=$(prompt_with_default "Cache directory" "$g_cache")
+    fi
+    local in_client in_slug
+    in_client=$(prompt_with_default "Client display name" "$l_client")
+    in_slug=$(prompt_with_default "URL slug" "$l_slug")
+
+    [[ -n "$in_proj" ]]   || die "Pages project name required"
+    [[ -n "$in_dom" ]]    || die "Public URL base required"
+    [[ -n "$in_cache" ]]  || die "Cache directory required"
+    [[ -n "$in_client" ]] || die "Client name required"
+    [[ -n "$in_slug" ]]   || die "Slug required"
+
+    in_cache="${in_cache/#~/$HOME}"
+
+    if [[ -n "$need_global" ]]; then
+        write_config_file "$SPENT_GLOBAL_CONFIG" \
+            "SPENT_PAGES_PROJECT=\"$in_proj\"" \
+            "SPENT_PAGES_DOMAIN=\"$in_dom\"" \
+            "SPENT_CACHE_DIR=\"$in_cache\""
+        printf 'wrote %s\n' "$SPENT_GLOBAL_CONFIG" >&2
+    fi
+
+    write_config_file "$SPENT_LOCAL_CONFIG" \
+        "SPENT_CLIENT_NAME=\"$in_client\"" \
+        "SPENT_SLUG=\"$in_slug\""
+    printf 'wrote ./%s\n' "$SPENT_LOCAL_CONFIG" >&2
+
+    printf 'configured. run "spent push" to publish hours -> %s/%s/\n' "$in_dom" "$in_slug" >&2
+}
+
 cmd_config() {
-    die "spent config: not yet implemented (#3 in progress)" 1
+    local sub="" reset_site=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            show) sub="show"; shift ;;
+            --reset-site) reset_site=1; shift ;;
+            -h|--help) usage; exit 0 ;;
+            *) die "unknown config arg: $1" ;;
+        esac
+    done
+
+    if [[ "$sub" == "show" ]]; then
+        config_show
+        return
+    fi
+
+    config_setup "$reset_site"
 }
 
 cmd_push() {
