@@ -1,4 +1,4 @@
-.Dd May 2, 2026
+.Dd May 8, 2026
 .Dt SPENT 1
 .Os
 .Sh NAME
@@ -12,6 +12,12 @@
 .Op Fl m Ar message
 .Op Fl st Ar "DD-MM-YY HH:MM"
 .Op Fl et Ar "DD-MM-YY HH:MM"
+.Nm
+.Cm config
+.Op Cm show
+.Op Fl -reset-site
+.Nm
+.Cm push
 .Sh DESCRIPTION
 The
 .Nm
@@ -103,10 +109,71 @@ The CSV header line
 is written exactly once, when the target file is first created.
 Each invocation appends one row.
 A success message is printed to standard error.
+.Sh SUBCOMMANDS
+.Ss config
+.Nm
+.Cm config
+sets up publishing for the current folder.
+It writes two files
+.Po both with mode 0600 Pc :
+a global file at
+.Pa ~/.config/spent/site.conf
+holding the Cloudflare Pages project name, public URL base, and local
+cache directory; and a per-folder file at
+.Pa ./.spent-config
+holding the client display name and URL slug.
+On first run it prompts for both layers; on subsequent runs in a new
+folder it only prompts for the per-folder values.
+.Pp
+After the config files are written
+.Nm
+copies the bundled
+.Pa template/index.html
+into
+.Pa <cache>/<slug>/ ,
+writes an empty
+.Pa months.json ,
+and runs
+.Sy "wrangler pages deploy"
+so the page is live before any data has been pushed.
+If
+.Sy wrangler
+is not installed or not logged in, the deploy step is skipped with a
+clear message and the config files are still written.
+.Pp
+.Cm config show
+prints both layers verbatim.
+.Cm config --reset-site
+forces the global prompts to reappear.
+.Ss push
+.Nm
+.Cm push
+publishes (or refreshes) the per-month JSON files to the Pages project.
+The static page is left in place; only the data files change between
+pushes.
+See the
+.Sx FILES
+section for the cache layout.
 .Sh FILES
 .Bl -tag -width Ds
 .It Pa ./.spent-MM-YYYY.log
 Per-folder, per-month CSV log written in the current working directory.
+.It Pa ./.spent-config
+Per-folder publishing config: client display name and URL slug.
+.It Pa ~/.config/spent/site.conf
+Global publishing config: Cloudflare Pages project name, public URL
+base, and local cache directory.
+.It Pa ~/.local/share/spent/site/<slug>/
+Local cache mirroring what is deployed to Pages.
+Contains
+.Pa index.html ,
+.Pa months.json ,
+and one
+.Pa <YYYY-MM>.json
+per month.
+.It Pa ~/.local/share/spent/template/
+Bundled HTML template, symlinked here by
+.Pa install.sh .
 .El
 .Sh EXIT STATUS
 .Bl -tag -width Ds

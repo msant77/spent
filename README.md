@@ -67,7 +67,64 @@ bats tests/
 
 Bash 3.2 compatible. macOS-only (uses BSD `date -j`).
 
+## Publishing reports
+
+`spent` can publish a per-customer web page that reads the same `.spent-MM-YYYY.log`
+files this folder already produces. The page is served from a Cloudflare Pages
+project (set up once) and is updated by uploading JSON files via `wrangler` —
+no git repo is involved.
+
+Prerequisites:
+
+- `wrangler` (`npm install -g wrangler`) and a `wrangler login` session.
+- A Cloudflare Pages project (e.g. `spent-reports`) with a custom domain bound
+  (e.g. `reports.marcosantana.dev`). Create this in the Cloudflare dashboard
+  or with `wrangler pages project create`.
+
+One-time per folder:
+
+```sh
+spent config
+```
+
+This prompts for:
+
+- **Cloudflare Pages project name** — global, asked once
+- **Public URL base** — e.g. `https://reports.marcosantana.dev`
+- **Cache directory** — defaults to `~/.local/share/spent/site/`
+- **Client display name** — used as the page title (per-folder)
+- **URL slug** — the path under the domain (per-folder)
+
+`spent config` writes `~/.config/spent/site.conf` (global) and `./.spent-config`
+(per-folder), both with mode 0600. It then copies the bundled HTML template
+into `<cache>/<slug>/`, writes an empty `months.json`, and runs
+`wrangler pages deploy` so the page is live immediately.
+
+Inspect the current config:
+
+```sh
+spent config show
+```
+
+Re-prompt the global fields:
+
+```sh
+spent config --reset-site
+```
+
+Each subsequent push:
+
+```sh
+spent push        # (#4) coming next
+```
+
+`spent push` reads every `.spent-*.log` in the current folder, converts each
+to a `<YYYY-MM>.json` under the slug's cache dir, refreshes `months.json`,
+and re-runs `wrangler pages deploy`.
+
 ## Roadmap
 
-- v1 (this release): append-only
-- v2: `spent report` — sum hours by type/issue for the current folder + month
+- v1 (shipped): append-only logger
+- v1.1 (shipped): `spent config` — per-folder publishing setup
+- v1.2 (next): `spent push` — publish/refresh hours JSONs to Cloudflare Pages
+- v1.3 (next): polished customer-facing report page
