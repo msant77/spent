@@ -5,34 +5,246 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Relatório de Horas</title>
 <style>
-  :root { color-scheme: light dark; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-    max-width: 720px;
-    margin: 2.5rem auto;
-    padding: 0 1rem;
-    line-height: 1.5;
+  :root {
+    color-scheme: light dark;
+    --bg: #fafafa;
+    --fg: #1a1a1a;
+    --muted: #666;
+    --line: #e5e5e5;
+    --accent: #1f5fa8;
+    --accent-fg: #fff;
+    --row-alt: #f3f3f3;
   }
-  h1 { font-size: 1.5rem; font-weight: 600; }
-  .empty { color: #888; font-style: italic; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161616;
+      --fg: #ededed;
+      --muted: #9a9a9a;
+      --line: #2c2c2c;
+      --accent: #4d8fd6;
+      --accent-fg: #0f0f0f;
+      --row-alt: #1d1d1d;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+    line-height: 1.5;
+    font-size: 16px;
+  }
+  header h1 { font-size: 1.4rem; font-weight: 600; margin: 0 0 1.25rem; }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 1rem;
+  }
+  .tab {
+    appearance: none;
+    background: transparent;
+    color: var(--muted);
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 0.5rem 0.75rem;
+    font: inherit;
+    cursor: pointer;
+    border-radius: 4px 4px 0 0;
+  }
+  .tab:hover { color: var(--fg); background: var(--row-alt); }
+  .tab[aria-selected="true"] {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+
+  .total {
+    color: var(--muted);
+    margin: 0 0 0.75rem;
+    font-size: 0.95rem;
+  }
+  .total strong { color: var(--fg); font-weight: 600; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  th, td {
+    padding: 0.55rem 0.5rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    text-align: left;
+  }
+  th {
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  tbody tr:nth-child(odd) { background: var(--row-alt); }
+  td.mono, th.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: nowrap; }
+  td.msg { word-break: break-word; }
+  .ref { color: var(--muted); }
+
+  .empty {
+    color: var(--muted);
+    font-style: italic;
+    padding: 1rem 0;
+  }
+
+  @media (max-width: 480px) {
+    body { padding: 1rem 0.75rem 2rem; font-size: 15px; }
+    th, td { padding: 0.45rem 0.35rem; }
+    th.tipo, td.tipo, th.ref-col, td.ref-col { display: none; }
+  }
 </style>
 </head>
 <body>
+<header>
+  <h1 id="title">Relatório de Horas</h1>
+</header>
+<nav class="tabs" id="tabs" role="tablist" aria-label="Meses"></nav>
 <main>
-<h1 id="title">Relatório de Horas</h1>
-<p class="empty" id="empty">Sem dados ainda.</p>
+  <p class="total" id="total" hidden>Total no mês: <strong id="total-value">0h</strong></p>
+  <div id="content"></div>
 </main>
 <script>
-  fetch('months.json', { cache: 'no-store' })
-    .then(function (r) { return r.json(); })
+(function () {
+  var MONTHS_PT_FULL = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var MONTHS_PT_SHORT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  var elTitle = document.getElementById("title");
+  var elTabs = document.getElementById("tabs");
+  var elContent = document.getElementById("content");
+  var elTotalRow = document.getElementById("total");
+  var elTotal = document.getElementById("total-value");
+
+  function fmtMinutes(m) {
+    var h = Math.floor(m / 60);
+    var mm = m % 60;
+    if (h && mm) return h + "h " + (mm < 10 ? "0" : "") + mm + "m";
+    if (h) return h + "h";
+    return mm + "m";
+  }
+
+  function fmtTabLabel(period) {
+    var parts = period.split("-");
+    var y = parts[0];
+    var m = parseInt(parts[1], 10) - 1;
+    if (m < 0 || m > 11) return period;
+    return MONTHS_PT_SHORT[m] + " " + y;
+  }
+
+  function fmtStart(iso) {
+    if (!iso || iso.length < 16) return iso || "";
+    var d = iso.slice(0, 10).split("-");
+    var y = d[0], mo = parseInt(d[1], 10) - 1, day = d[2];
+    var hm = iso.slice(11, 16);
+    var monthLabel = (mo >= 0 && mo <= 11) ? MONTHS_PT_SHORT[mo] : d[1];
+    return day + " " + monthLabel + " " + hm;
+  }
+
+  function escape(s) {
+    if (s === undefined || s === null) return "";
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function renderEmpty(msg) {
+    elContent.innerHTML = '<p class="empty">' + escape(msg) + "</p>";
+    elTotalRow.hidden = true;
+  }
+
+  function renderEntries(data) {
+    var entries = (data && data.entries) || [];
+    if (!entries.length) {
+      renderEmpty("Sem entradas neste mês.");
+      return;
+    }
+    elTotal.textContent = fmtMinutes(data.total_minutes || 0);
+    elTotalRow.hidden = false;
+    var rows = "";
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      rows += "<tr>"
+        + '<td class="mono">' + escape(fmtStart(e.start)) + "</td>"
+        + '<td class="mono">' + escape(e.duration || "") + "</td>"
+        + '<td class="tipo">' + escape(e.type || "") + "</td>"
+        + '<td class="ref-col ref">' + escape(e.ref || "") + "</td>"
+        + '<td class="msg">' + escape(e.message || "") + "</td>"
+        + "</tr>";
+    }
+    elContent.innerHTML =
+      "<table>"
+      + "<thead><tr>"
+      + '<th class="mono">Início</th>'
+      + '<th class="mono">Dur.</th>'
+      + '<th class="tipo">Tipo</th>'
+      + '<th class="ref-col">Ref.</th>'
+      + "<th>Descrição</th>"
+      + "</tr></thead>"
+      + "<tbody>" + rows + "</tbody>"
+      + "</table>";
+  }
+
+  function selectTab(tabBtn, period) {
+    var siblings = elTabs.querySelectorAll(".tab");
+    for (var i = 0; i < siblings.length; i++) {
+      siblings[i].setAttribute("aria-selected", siblings[i] === tabBtn ? "true" : "false");
+    }
+    elContent.innerHTML = '<p class="empty">Carregando…</p>';
+    elTotalRow.hidden = true;
+    fetch(period + ".json", { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+      .then(renderEntries)
+      .catch(function () { renderEmpty("Não foi possível carregar este mês."); });
+  }
+
+  function renderTabs(months) {
+    elTabs.innerHTML = "";
+    if (!months || !months.length) {
+      renderEmpty("Sem dados ainda.");
+      return;
+    }
+    for (var i = 0; i < months.length; i++) {
+      var m = months[i];
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tab";
+      btn.role = "tab";
+      btn.textContent = fmtTabLabel(m.period);
+      btn.setAttribute("aria-selected", "false");
+      (function (period, b) {
+        b.addEventListener("click", function () { selectTab(b, period); });
+      })(m.period, btn);
+      elTabs.appendChild(btn);
+    }
+    var first = elTabs.querySelector(".tab");
+    if (first) selectTab(first, months[0].period);
+  }
+
+  fetch("months.json", { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
     .then(function (data) {
-      var client = data && data.client ? data.client : '';
+      var client = (data && data.client) || "";
       if (client) {
-        document.title = client + ' · Relatório de Horas';
-        document.getElementById('title').textContent = client + ' · Relatório de Horas';
+        document.title = client + " · Relatório de Horas";
+        elTitle.textContent = client + " · Relatório de Horas";
       }
+      renderTabs(data && data.months);
     })
-    .catch(function () { /* leave defaults */ });
+    .catch(function () { renderEmpty("Não foi possível carregar o relatório."); });
+})();
 </script>
 </body>
 </html>
