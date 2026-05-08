@@ -47,6 +47,117 @@ json_escape_string() {
     printf '%s' "$s"
 }
 
+pt_month_name() {
+    case "$1" in
+        01) printf 'Janeiro' ;;
+        02) printf 'Fevereiro' ;;
+        03) printf 'Março' ;;
+        04) printf 'Abril' ;;
+        05) printf 'Maio' ;;
+        06) printf 'Junho' ;;
+        07) printf 'Julho' ;;
+        08) printf 'Agosto' ;;
+        09) printf 'Setembro' ;;
+        10) printf 'Outubro' ;;
+        11) printf 'Novembro' ;;
+        12) printf 'Dezembro' ;;
+        *)  printf '%s' "$1" ;;
+    esac
+}
+
+pt_label() {
+    local period="$1"
+    local yy="${period%-*}" mm="${period##*-}"
+    printf '%s %s' "$(pt_month_name "$mm")" "$yy"
+}
+
+# Convert one .spent-MM-YYYY.log (RFC 4180 CSV, all-quoted, "" escapes) to
+# the per-month JSON envelope expected by the published page. Uses an awk
+# state machine so messages containing the literal substring `","` round-trip
+# correctly.
+csv_to_json() {
+    local csv_file="$1" period="$2" client="$3" label
+    label=$(pt_label "$period")
+    awk -v period="$period" -v label="$label" -v client="$client" '
+    function json_escape(s,    o, n, i, c) {
+        o = ""; n = length(s)
+        for (i = 1; i <= n; i++) {
+            c = substr(s, i, 1)
+            if      (c == "\\") o = o "\\\\"
+            else if (c == "\"") o = o "\\\""
+            else if (c == "\n") o = o "\\n"
+            else if (c == "\r") o = o "\\r"
+            else if (c == "\t") o = o "\\t"
+            else                o = o c
+        }
+        return o
+    }
+    function duration_to_minutes(s,    h, m) {
+        h = 0; m = 0
+        if (match(s, /[0-9]+h/)) h = substr(s, RSTART, RLENGTH-1) + 0
+        if (match(s, /[0-9]+m/)) m = substr(s, RSTART, RLENGTH-1) + 0
+        return h * 60 + m
+    }
+    function date_to_iso(s,    p, n) {
+        n = split(s, p, /[- :]/)
+        if (n != 5) return s
+        return "20" p[3] "-" p[2] "-" p[1] "T" p[4] ":" p[5] ":00"
+    }
+    function emit_field() {
+        fields[++nf] = cur
+        cur = ""
+    }
+    function process_row(line,    n, i, c) {
+        n = length(line); nf = 0; delete fields; cur = ""; state = "out"
+        for (i = 1; i <= n; i++) {
+            c = substr(line, i, 1)
+            if (state == "out") {
+                if (c == "\"") state = "in"
+            } else if (state == "in") {
+                if (c == "\"") state = "dq"
+                else cur = cur c
+            } else {
+                if      (c == "\"") { cur = cur "\""; state = "in" }
+                else if (c == ",")  { emit_field(); state = "out" }
+            }
+        }
+        if (state == "dq") emit_field()
+    }
+    BEGIN {
+        printf "{\n"
+        printf "  \"period\": \"%s\",\n", period
+        printf "  \"label\": \"%s\",\n", json_escape(label)
+        printf "  \"client\": \"%s\",\n", json_escape(client)
+        printf "  \"entries\": ["
+        first = 1; total = 0
+    }
+    NR == 1 { next }
+    NF == 0 { next }
+    {
+        process_row($0)
+        if (nf < 6) next
+        m = duration_to_minutes(fields[1])
+        total += m
+        if (first) { printf "\n    "; first = 0 } else printf ",\n    "
+        printf "{"
+        printf "\"duration\": \"%s\", ",       json_escape(fields[1])
+        printf "\"duration_minutes\": %d, ",   m
+        printf "\"type\": \"%s\", ",           json_escape(fields[2])
+        printf "\"ref\": \"%s\", ",            json_escape(fields[3])
+        printf "\"message\": \"%s\", ",        json_escape(fields[4])
+        printf "\"start\": \"%s\", ",          date_to_iso(fields[5])
+        printf "\"end\": \"%s\"",              date_to_iso(fields[6])
+        printf "}"
+    }
+    END {
+        if (!first) printf "\n  "
+        printf "],\n"
+        printf "  \"total_minutes\": %d\n", total
+        printf "}\n"
+    }
+    ' "$csv_file"
+}
+
 usage() {
     cat >&2 <<EOF
 Usage: $PROG <duration> [-t TYPE] [#REF|!REF] [-m MESSAGE] [-st "DD-MM-YY HH:MM"] [-et "DD-MM-YY HH:MM"]
