@@ -544,8 +544,107 @@ cmd_config() {
     config_setup "$reset_site"
 }
 
+write_months_json() {
+    local out_file="$1" client="$2"; shift 2
+    local sorted period label first=1
+    {
+        printf '{"client":"%s","months":[' "$(json_escape_string "$client")"
+        if [[ $# -gt 0 ]]; then
+            sorted=$(printf '%s\n' "$@" | sort -r)
+            while IFS= read -r period; do
+                [[ -n "$period" ]] || continue
+                label=$(pt_label "$period")
+                if [[ "$first" == "1" ]]; then
+                    first=0
+                else
+                    printf ','
+                fi
+                printf '{"period":"%s","label":"%s","file":"%s.json"}' \
+                    "$period" \
+                    "$(json_escape_string "$label")" \
+                    "$period"
+            done <<< "$sorted"
+        fi
+        printf ']}\n'
+    } > "$out_file"
+}
+
 cmd_push() {
-    die "spent push: not yet implemented (#4)" 1
+    if [[ ! -f "$SPENT_GLOBAL_CONFIG" ]]; then
+        die "no global config; run \"spent config\" first" 1
+    fi
+    if [[ ! -f "$SPENT_LOCAL_CONFIG" ]]; then
+        die "no .spent-config in this folder; run \"spent config\" first" 1
+    fi
+
+    # shellcheck disable=SC1090
+    source "$SPENT_GLOBAL_CONFIG"
+    # shellcheck disable=SC1090
+    source "$SPENT_LOCAL_CONFIG"
+
+    [[ -n "${SPENT_PAGES_PROJECT:-}" ]] || die "SPENT_PAGES_PROJECT missing in $SPENT_GLOBAL_CONFIG" 1
+    [[ -n "${SPENT_PAGES_DOMAIN:-}" ]]  || die "SPENT_PAGES_DOMAIN missing in $SPENT_GLOBAL_CONFIG" 1
+    [[ -n "${SPENT_CACHE_DIR:-}" ]]     || die "SPENT_CACHE_DIR missing in $SPENT_GLOBAL_CONFIG" 1
+    [[ -n "${SPENT_CLIENT_NAME:-}" ]]   || die "SPENT_CLIENT_NAME missing in $SPENT_LOCAL_CONFIG" 1
+    [[ -n "${SPENT_SLUG:-}" ]]          || die "SPENT_SLUG missing in $SPENT_LOCAL_CONFIG" 1
+
+    local logs=()
+    local f
+    for f in .spent-*.log; do
+        [[ -f "$f" ]] || continue
+        logs+=("$f")
+    done
+    if [[ ${#logs[@]} -eq 0 ]]; then
+        die "no .spent-*.log files in this folder" 1
+    fi
+
+    local slug_dir="$SPENT_CACHE_DIR/$SPENT_SLUG"
+    mkdir -p "$slug_dir"
+
+    local periods=()
+    for f in "${logs[@]}"; do
+        local base="${f#.spent-}"; base="${base%.log}"  # MM-YYYY
+        if [[ ! "$base" =~ ^([0-9]{2})-([0-9]{4})$ ]]; then
+            printf 'warn: skipping %s (unexpected name)\n' "$f" >&2
+            continue
+        fi
+        local mm="${BASH_REMATCH[1]}" yy="${BASH_REMATCH[2]}"
+        local period="${yy}-${mm}"
+        local out="$slug_dir/${period}.json"
+        if ! csv_to_json "$f" "$period" "$SPENT_CLIENT_NAME" > "$out.tmp"; then
+            rm -f "$out.tmp"
+            die "failed to convert $f" 1
+        fi
+        mv "$out.tmp" "$out"
+        periods+=("$period")
+    done
+
+    if [[ ${#periods[@]} -eq 0 ]]; then
+        die "no valid log files to publish" 1
+    fi
+
+    write_months_json "$slug_dir/months.json" "$SPENT_CLIENT_NAME" "${periods[@]}"
+
+    if [[ ! -f "$slug_dir/index.html" ]]; then
+        local template
+        template=$(spent_template_path)
+        if [[ -f "$template/index.html" ]]; then
+            cp "$template/index.html" "$slug_dir/index.html"
+        else
+            printf 'warn: template not found at %s — page may 404\n' "$template" >&2
+        fi
+    fi
+
+    if ! require_wrangler; then
+        die "wrangler required for spent push" 1
+    fi
+
+    printf 'deploying %d month(s) to "%s"...\n' "${#periods[@]}" "$SPENT_PAGES_PROJECT" >&2
+    if ! wrangler pages deploy "$SPENT_CACHE_DIR" --project-name="$SPENT_PAGES_PROJECT" --branch=main >&2; then
+        die "wrangler pages deploy failed" 1
+    fi
+
+    printf 'published -> %s/%s/\n' "$SPENT_PAGES_DOMAIN" "$SPENT_SLUG" >&2
 }
 
 main() {
