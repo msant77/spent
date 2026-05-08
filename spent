@@ -47,6 +47,17 @@ json_escape_string() {
     printf '%s' "$s"
 }
 
+# Escape a value for embedding inside a Bash double-quoted string. The result
+# can be wrapped in "..." and source'd back to recover the original.
+bash_dq_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//\$/\\\$}"
+    s="${s//\`/\\\`}"
+    printf '%s' "$s"
+}
+
 pt_month_name() {
     case "$1" in
         01) printf 'Janeiro' ;;
@@ -469,15 +480,15 @@ config_setup() {
 
     if [[ -n "$need_global" ]]; then
         write_config_file "$SPENT_GLOBAL_CONFIG" \
-            "SPENT_PAGES_PROJECT=\"$in_proj\"" \
-            "SPENT_PAGES_DOMAIN=\"$in_dom\"" \
-            "SPENT_CACHE_DIR=\"$in_cache\""
+            "SPENT_PAGES_PROJECT=\"$(bash_dq_escape "$in_proj")\"" \
+            "SPENT_PAGES_DOMAIN=\"$(bash_dq_escape "$in_dom")\"" \
+            "SPENT_CACHE_DIR=\"$(bash_dq_escape "$in_cache")\""
         printf 'wrote %s\n' "$SPENT_GLOBAL_CONFIG" >&2
     fi
 
     write_config_file "$SPENT_LOCAL_CONFIG" \
-        "SPENT_CLIENT_NAME=\"$in_client\"" \
-        "SPENT_SLUG=\"$in_slug\""
+        "SPENT_CLIENT_NAME=\"$(bash_dq_escape "$in_client")\"" \
+        "SPENT_SLUG=\"$(bash_dq_escape "$in_slug")\""
     printf 'wrote ./%s\n' "$SPENT_LOCAL_CONFIG" >&2
 
     config_initial_deploy "$in_cache" "$in_proj" "$in_slug" "$in_client"
