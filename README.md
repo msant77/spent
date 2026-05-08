@@ -115,16 +115,21 @@ spent config --reset-site
 Each subsequent push:
 
 ```sh
-spent push        # (#4) coming next
+spent push
 ```
 
 `spent push` reads every `.spent-*.log` in the current folder, converts each
 to a `<YYYY-MM>.json` under the slug's cache dir, refreshes `months.json`,
-and re-runs `wrangler pages deploy`.
+and re-runs `wrangler pages deploy`. Wrangler diffs internally so unchanged
+files don't cross the wire.
+
+The page fetches `months.json` on load and a per-month `<YYYY-MM>.json` when
+the visitor picks a tab. The static template stays in place — only the JSON
+files change between pushes.
 
 ## Roadmap
 
-- v1 (shipped): append-only logger
+- v1   (shipped): append-only logger
 - v1.1 (shipped): `spent config` — per-folder publishing setup
-- v1.2 (next): `spent push` — publish/refresh hours JSONs to Cloudflare Pages
-- v1.3 (next): polished customer-facing report page
+- v1.2 (shipped): `spent push` — publish/refresh hours JSONs to Cloudflare Pages
+- v1.3 (next):    polished customer-facing report page

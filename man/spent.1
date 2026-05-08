@@ -148,12 +148,34 @@ forces the global prompts to reappear.
 .Ss push
 .Nm
 .Cm push
-publishes (or refreshes) the per-month JSON files to the Pages project.
-The static page is left in place; only the data files change between
-pushes.
-See the
-.Sx FILES
-section for the cache layout.
+publishes (or refreshes) the per-month JSON files to the Pages project
+configured for the current folder.
+For each
+.Pa .spent-MM-YYYY.log
+in the working directory it produces
+.Pa <cache>/<slug>/<YYYY-MM>.json
+(year-first naming, friendlier sort order) and rebuilds
+.Pa months.json
+listing every period in descending order with Portuguese labels
+.Po Sy "Maio 2026" , Sy "Abril 2026" , Sy "Março 2026" Pc .
+.Pp
+The bundled HTML/CSS/JS template is left in place; only the JSON
+files change between pushes.
+The page fetches
+.Pa months.json
+on load and the per-period
+.Pa <YYYY-MM>.json
+on demand.
+.Pp
+.Cm push
+requires
+.Sy wrangler
+to be installed and logged in.
+After updating the JSON files locally it runs
+.Sy "wrangler pages deploy <cache> --project-name=<proj> --branch=main"
+to publish.
+Wrangler diffs internally, so unchanged files are not re-uploaded
+over the wire.
 .Sh FILES
 .Bl -tag -width Ds
 .It Pa ./.spent-MM-YYYY.log
@@ -167,10 +189,19 @@ base, and local cache directory.
 Local cache mirroring what is deployed to Pages.
 Contains
 .Pa index.html ,
-.Pa months.json ,
+the months index
+.Pa months.json :
+.Bd -literal -offset indent
+{ "client": "...", "months": [ ... ] }
+.Ed
+.Pp
 and one
 .Pa <YYYY-MM>.json
-per month.
+per month with shape:
+.Bd -literal -offset indent
+{ "period": "YYYY-MM", "label": "Maio 2026", "client": "...",
+  "entries": [ ... ], "total_minutes": N }
+.Ed
 .It Pa ~/.local/share/spent/template/
 Bundled HTML template, symlinked here by
 .Pa install.sh .
