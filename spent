@@ -508,6 +508,22 @@ require_wrangler() {
     return 0
 }
 
+# Create the Pages project for <slug> if it doesn't exist. Wrangler v4
+# requires this before the first deploy. Treat "already exists" responses
+# as success so the call is idempotent on re-runs.
+ensure_pages_project() {
+    local slug="$1" out
+    if out=$(wrangler pages project create "$slug" --production-branch=main 2>&1); then
+        printf '%s\n' "$out" | tail -3 >&2
+        return 0
+    fi
+    if printf '%s' "$out" | grep -qiE 'already (exists|in use)|409|conflict'; then
+        return 0
+    fi
+    printf '%s\n' "$out" >&2
+    return 1
+}
+
 config_initial_deploy() {
     local cache_dir="$1" slug="$2" client="$3"
 
@@ -529,6 +545,10 @@ config_initial_deploy() {
     if ! require_wrangler; then
         printf 'skipping initial deploy. run "spent push" once wrangler is ready.\n' >&2
         return 0
+    fi
+
+    if ! ensure_pages_project "$slug"; then
+        die "could not create Pages project \"$slug\"" 1
     fi
 
     printf 'deploying initial page to Pages project "%s"...\n' "$slug" >&2

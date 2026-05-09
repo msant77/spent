@@ -140,6 +140,38 @@ local_answers() {
     grep -q "$SPENT_CACHE_DIR_TEST/pontosat" "$WRANGLER_LOG"
 }
 
+@test "config auto-creates the Pages project before deploying" {
+    all_answers | "$SPENT_BIN" config >/dev/null
+    [ -f "$WRANGLER_LOG" ]
+    grep -q 'pages project create pontosat --production-branch=main' "$WRANGLER_LOG"
+    # And the create call must come before the deploy call.
+    create_line=$(grep -n 'pages project create pontosat' "$WRANGLER_LOG" | head -1 | cut -d: -f1)
+    deploy_line=$(grep -n 'pages deploy' "$WRANGLER_LOG" | head -1 | cut -d: -f1)
+    [ "$create_line" -lt "$deploy_line" ]
+}
+
+@test "config tolerates an already-existing Pages project" {
+    # Replace the stub with one that fails "already exists" on create
+    # but otherwise records args and exits 0.
+    rm "$STUB_DIR/wrangler"
+    cat > "$STUB_DIR/wrangler" <<'STUB'
+#!/usr/bin/env bash
+if [[ "${1:-} ${2:-} ${3:-}" == "pages project create" ]]; then
+    printf 'Error: A project with the name "%s" already exists.\n' "${4:-}" >&2
+    exit 1
+fi
+case "${1:-}" in
+    whoami) printf 'stub@example.com\n'; exit 0 ;;
+    *)      [[ -n "${WRANGLER_LOG:-}" ]] && printf '%s\n' "$*" >> "$WRANGLER_LOG"; exit 0 ;;
+esac
+STUB
+    chmod +x "$STUB_DIR/wrangler"
+
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'pontosat' | '$SPENT_BIN' config"
+    [ "$status" -eq 0 ]
+    grep -q 'pages deploy' "$WRANGLER_LOG"
+}
+
 # --- wrangler missing -------------------------------------------------------
 
 @test "config without wrangler still writes config files and exits 0" {
