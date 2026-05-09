@@ -429,15 +429,14 @@ config_show() {
 config_setup() {
     local reset_site="$1"
 
-    local g_proj="" g_dom="" g_cache=""
+    local g_parent="" g_cache=""
     if [[ -f "$SPENT_GLOBAL_CONFIG" ]]; then
         # shellcheck disable=SC1090
         source "$SPENT_GLOBAL_CONFIG"
-        g_proj="${SPENT_PAGES_PROJECT:-}"
-        g_dom="${SPENT_PAGES_DOMAIN:-}"
+        g_parent="${SPENT_PARENT_DOMAIN:-}"
         g_cache="${SPENT_CACHE_DIR:-}"
     fi
-    : "${g_proj:=spent-reports}"
+    : "${g_parent:=marcosantana.dev}"
     : "${g_cache:=$HOME/.local/share/spent/site}"
 
     local l_client="" l_slug=""
@@ -452,22 +451,20 @@ config_setup() {
     : "${l_client:=$(capitalize "$folder")}"
     : "${l_slug:=$(slugify "$folder")}"
 
-    local in_proj="$g_proj" in_dom="$g_dom" in_cache="$g_cache"
+    local in_parent="$g_parent" in_cache="$g_cache"
     local need_global=""
     if [[ ! -f "$SPENT_GLOBAL_CONFIG" || -n "$reset_site" ]]; then
         need_global=1
     fi
     if [[ -n "$need_global" ]]; then
-        in_proj=$(prompt_with_default "Cloudflare Pages project name" "$g_proj")
-        in_dom=$(prompt_with_default "Public URL base (e.g. https://reports.marcosantana.dev)" "$g_dom")
+        in_parent=$(prompt_with_default "Parent domain (subdomains will be <slug>.<parent>)" "$g_parent")
         in_cache=$(prompt_with_default "Cache directory" "$g_cache")
     fi
     local in_client in_slug
     in_client=$(prompt_with_default "Client display name" "$l_client")
-    in_slug=$(prompt_with_default "URL slug" "$l_slug")
+    in_slug=$(prompt_with_default "Subdomain label (also Pages project name)" "$l_slug")
 
-    [[ -n "$in_proj" ]]   || die "Pages project name required"
-    [[ -n "$in_dom" ]]    || die "Public URL base required"
+    [[ -n "$in_parent" ]] || die "Parent domain required"
     [[ -n "$in_cache" ]]  || die "Cache directory required"
     [[ -n "$in_client" ]] || die "Client name required"
     [[ -n "$in_slug" ]]   || die "Slug required"
@@ -480,8 +477,7 @@ config_setup() {
 
     if [[ -n "$need_global" ]]; then
         write_config_file "$SPENT_GLOBAL_CONFIG" \
-            "SPENT_PAGES_PROJECT=\"$(bash_dq_escape "$in_proj")\"" \
-            "SPENT_PAGES_DOMAIN=\"$(bash_dq_escape "$in_dom")\"" \
+            "SPENT_PARENT_DOMAIN=\"$(bash_dq_escape "$in_parent")\"" \
             "SPENT_CACHE_DIR=\"$(bash_dq_escape "$in_cache")\""
         printf 'wrote %s\n' "$SPENT_GLOBAL_CONFIG" >&2
     fi
@@ -491,9 +487,10 @@ config_setup() {
         "SPENT_SLUG=\"$(bash_dq_escape "$in_slug")\""
     printf 'wrote ./%s\n' "$SPENT_LOCAL_CONFIG" >&2
 
-    config_initial_deploy "$in_cache" "$in_proj" "$in_slug" "$in_client"
+    config_initial_deploy "$in_cache" "$in_slug" "$in_client"
 
-    printf 'configured. live at -> %s/%s/\n' "$in_dom" "$in_slug" >&2
+    printf 'configured. live at -> https://%s.%s/\n' "$in_slug" "$in_parent" >&2
+    printf 'bind the custom domain in the Cloudflare dashboard if not already (Pages -> %s -> Custom domains -> %s.%s).\n' "$in_slug" "$in_slug" "$in_parent" >&2
     printf 'run "spent push" to publish hours.\n' >&2
 }
 
@@ -512,7 +509,7 @@ require_wrangler() {
 }
 
 config_initial_deploy() {
-    local cache_dir="$1" project="$2" slug="$3" client="$4"
+    local cache_dir="$1" slug="$2" client="$3"
 
     local slug_dir="$cache_dir/$slug"
     mkdir -p "$slug_dir"
@@ -534,8 +531,8 @@ config_initial_deploy() {
         return 0
     fi
 
-    printf 'deploying initial page to "%s"...\n' "$project" >&2
-    if ! wrangler pages deploy "$cache_dir" --project-name="$project" --branch=main >&2; then
+    printf 'deploying initial page to Pages project "%s"...\n' "$slug" >&2
+    if ! wrangler pages deploy "$slug_dir" --project-name="$slug" --branch=main >&2; then
         die "wrangler pages deploy failed" 1
     fi
 }
@@ -597,8 +594,7 @@ cmd_push() {
     # shellcheck disable=SC1090
     source "$SPENT_LOCAL_CONFIG"
 
-    [[ -n "${SPENT_PAGES_PROJECT:-}" ]] || die "SPENT_PAGES_PROJECT missing in $SPENT_GLOBAL_CONFIG" 1
-    [[ -n "${SPENT_PAGES_DOMAIN:-}" ]]  || die "SPENT_PAGES_DOMAIN missing in $SPENT_GLOBAL_CONFIG" 1
+    [[ -n "${SPENT_PARENT_DOMAIN:-}" ]] || die "SPENT_PARENT_DOMAIN missing in $SPENT_GLOBAL_CONFIG" 1
     [[ -n "${SPENT_CACHE_DIR:-}" ]]     || die "SPENT_CACHE_DIR missing in $SPENT_GLOBAL_CONFIG" 1
     [[ -n "${SPENT_CLIENT_NAME:-}" ]]   || die "SPENT_CLIENT_NAME missing in $SPENT_LOCAL_CONFIG" 1
     [[ -n "${SPENT_SLUG:-}" ]]          || die "SPENT_SLUG missing in $SPENT_LOCAL_CONFIG" 1
@@ -654,12 +650,12 @@ cmd_push() {
         die "wrangler required for spent push" 1
     fi
 
-    printf 'deploying %d month(s) to "%s"...\n' "${#periods[@]}" "$SPENT_PAGES_PROJECT" >&2
-    if ! wrangler pages deploy "$SPENT_CACHE_DIR" --project-name="$SPENT_PAGES_PROJECT" --branch=main >&2; then
+    printf 'deploying %d month(s) to Pages project "%s"...\n' "${#periods[@]}" "$SPENT_SLUG" >&2
+    if ! wrangler pages deploy "$slug_dir" --project-name="$SPENT_SLUG" --branch=main >&2; then
         die "wrangler pages deploy failed" 1
     fi
 
-    printf 'published -> %s/%s/\n' "$SPENT_PAGES_DOMAIN" "$SPENT_SLUG" >&2
+    printf 'published -> https://%s.%s/\n' "$SPENT_SLUG" "$SPENT_PARENT_DOMAIN" >&2
 }
 
 main() {

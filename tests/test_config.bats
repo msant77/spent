@@ -20,11 +20,10 @@ teardown() {
     rm -rf "$TEST_TMPDIR"
 }
 
-# All five global+local prompts: project, domain, cache, client, slug
+# All four global+local prompts: parent_domain, cache, client, slug
 all_answers() {
     printf '%s\n' \
-        "spent-reports" \
-        "https://reports.example.com" \
+        "example.com" \
         "$SPENT_CACHE_DIR_TEST" \
         "Pontosat" \
         "pontosat"
@@ -47,7 +46,7 @@ local_answers() {
     all_answers | "$SPENT_BIN" config >/dev/null
     run "$SPENT_BIN" config show
     [ "$status" -eq 0 ]
-    [[ "$output" == *'SPENT_PAGES_PROJECT="spent-reports"'* ]]
+    [[ "$output" == *'SPENT_PARENT_DOMAIN="example.com"'* ]]
     [[ "$output" == *'SPENT_CLIENT_NAME="Pontosat"'* ]]
     [[ "$output" == *'SPENT_SLUG="pontosat"'* ]]
 }
@@ -70,8 +69,7 @@ local_answers() {
 
 @test "config writes expected global keys" {
     all_answers | "$SPENT_BIN" config >/dev/null
-    grep -q '^SPENT_PAGES_PROJECT="spent-reports"$' "$SPENT_GLOBAL_CONFIG"
-    grep -q '^SPENT_PAGES_DOMAIN="https://reports.example.com"$' "$SPENT_GLOBAL_CONFIG"
+    grep -q '^SPENT_PARENT_DOMAIN="example.com"$' "$SPENT_GLOBAL_CONFIG"
     grep -q "^SPENT_CACHE_DIR=\"$SPENT_CACHE_DIR_TEST\"\$" "$SPENT_GLOBAL_CONFIG"
 }
 
@@ -92,22 +90,20 @@ local_answers() {
     [[ "$output" == *"Client display name"* ]]
 }
 
-@test "--reset-site re-asks all five prompts" {
+@test "--reset-site re-asks all four prompts" {
     all_answers | "$SPENT_BIN" config >/dev/null
-    run bash -c "printf '%s\n' '' '' '' 'NewClient' 'new-client' | '$SPENT_BIN' config --reset-site"
+    run bash -c "printf '%s\n' '' '' 'NewClient' 'new-client' | '$SPENT_BIN' config --reset-site"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Cloudflare Pages project name"* ]]
-    [[ "$output" == *"Public URL base"* ]]
+    [[ "$output" == *"Parent domain"* ]]
     [[ "$output" == *"Cache directory"* ]]
     [[ "$output" == *"Client display name"* ]]
-    [[ "$output" == *"URL slug"* ]]
+    [[ "$output" == *"Subdomain label"* ]]
 }
 
 @test "blank input keeps existing default on --reset-site" {
     all_answers | "$SPENT_BIN" config >/dev/null
-    printf '%s\n' '' '' '' 'NewClient' 'new-client' | "$SPENT_BIN" config --reset-site >/dev/null
-    grep -q '^SPENT_PAGES_PROJECT="spent-reports"$' "$SPENT_GLOBAL_CONFIG"
-    grep -q '^SPENT_PAGES_DOMAIN="https://reports.example.com"$' "$SPENT_GLOBAL_CONFIG"
+    printf '%s\n' '' '' 'NewClient' 'new-client' | "$SPENT_BIN" config --reset-site >/dev/null
+    grep -q '^SPENT_PARENT_DOMAIN="example.com"$' "$SPENT_GLOBAL_CONFIG"
     grep -q '^SPENT_CLIENT_NAME="NewClient"$' .spent-config
 }
 
@@ -116,8 +112,8 @@ local_answers() {
 @test "default slug derives from folder basename, lowercased" {
     folder_name=$(basename "$TEST_TMPDIR")
     expected_slug=$(printf '%s' "$folder_name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g')
-    # Skip everything but the slug prompt
-    printf '%s\n' "spent-reports" "https://reports.example.com" "$SPENT_CACHE_DIR_TEST" "Pontosat" "" \
+    # Take the slug default by leaving the slug prompt blank
+    printf '%s\n' "example.com" "$SPENT_CACHE_DIR_TEST" "Pontosat" "" \
         | "$SPENT_BIN" config >/dev/null
     grep -q "^SPENT_SLUG=\"$expected_slug\"\$" .spent-config
 }
@@ -136,12 +132,12 @@ local_answers() {
     grep -q '"months":\[\]' "$SPENT_CACHE_DIR_TEST/pontosat/months.json"
 }
 
-@test "deploy invokes wrangler with project name and cache dir" {
+@test "deploy invokes wrangler with slug as project name and slug subdir" {
     all_answers | "$SPENT_BIN" config >/dev/null
     [ -f "$WRANGLER_LOG" ]
     grep -q 'pages deploy' "$WRANGLER_LOG"
-    grep -q -- '--project-name=spent-reports' "$WRANGLER_LOG"
-    grep -q "$SPENT_CACHE_DIR_TEST" "$WRANGLER_LOG"
+    grep -q -- '--project-name=pontosat' "$WRANGLER_LOG"
+    grep -q "$SPENT_CACHE_DIR_TEST/pontosat" "$WRANGLER_LOG"
 }
 
 # --- wrangler missing -------------------------------------------------------
@@ -149,7 +145,7 @@ local_answers() {
 @test "config without wrangler still writes config files and exits 0" {
     rm "$STUB_DIR/wrangler"
     export PATH="/usr/bin:/bin"
-    run bash -c "printf '%s\n' 'spent-reports' 'https://reports.example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'pontosat' | '$SPENT_BIN' config"
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'pontosat' | '$SPENT_BIN' config"
     [ "$status" -eq 0 ]
     [ -f "$SPENT_GLOBAL_CONFIG" ]
     [ -f .spent-config ]

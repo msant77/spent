@@ -21,12 +21,11 @@ teardown() {
     rm -rf "$TEST_TMPDIR"
 }
 
-# Drive the five global+local prompts with given client name and slug
+# Drive the four global+local prompts with given client name and slug
 configure_with() {
     local client="$1" slug="$2"
     printf '%s\n' \
-        "spent-reports" \
-        "https://reports.example.com" \
+        "example.com" \
         "$SPENT_CACHE_DIR_TEST" \
         "$client" \
         "$slug"
@@ -37,48 +36,48 @@ configure_with() {
 @test "slug with slash is rejected" {
     run bash -c "$(configure_with 'Pontosat' 'foo/bar' | sed 's/^/echo /' | tr '\n' '\n')true | '$SPENT_BIN' config"
     # simpler reformulation:
-    run bash -c "printf '%s\n' 'spent-reports' 'https://reports.example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'foo/bar' | '$SPENT_BIN' config"
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'foo/bar' | '$SPENT_BIN' config"
     [ "$status" -ne 0 ]
     [[ "$output" == *"invalid slug"* ]]
 }
 
 @test "slug with dot-dot is rejected" {
-    run bash -c "printf '%s\n' 'spent-reports' 'https://reports.example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' '../etc' | '$SPENT_BIN' config"
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' '../etc' | '$SPENT_BIN' config"
     [ "$status" -ne 0 ]
     [[ "$output" == *"invalid slug"* ]]
 }
 
 @test "slug with space is rejected" {
-    run bash -c "printf '%s\n' 'spent-reports' 'https://reports.example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'foo bar' | '$SPENT_BIN' config"
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'foo bar' | '$SPENT_BIN' config"
     [ "$status" -ne 0 ]
     [[ "$output" == *"invalid slug"* ]]
 }
 
 @test "slug with leading hyphen is rejected" {
-    run bash -c "printf '%s\n' 'spent-reports' 'https://reports.example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' '-foo' | '$SPENT_BIN' config"
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' '-foo' | '$SPENT_BIN' config"
     [ "$status" -ne 0 ]
     [[ "$output" == *"invalid slug"* ]]
 }
 
 @test "slug with trailing hyphen is rejected" {
-    run bash -c "printf '%s\n' 'spent-reports' 'https://reports.example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'foo-' | '$SPENT_BIN' config"
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'foo-' | '$SPENT_BIN' config"
     [ "$status" -ne 0 ]
     [[ "$output" == *"invalid slug"* ]]
 }
 
 @test "slug with uppercase is rejected" {
-    run bash -c "printf '%s\n' 'spent-reports' 'https://reports.example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'Pontosat' | '$SPENT_BIN' config"
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'Pontosat' | '$SPENT_BIN' config"
     [ "$status" -ne 0 ]
     [[ "$output" == *"invalid slug"* ]]
 }
 
 @test "slug with hyphen between alphanumerics is accepted" {
-    run bash -c "printf '%s\n' 'spent-reports' 'https://reports.example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'pontosat-a3f9d2' | '$SPENT_BIN' config"
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'Pontosat' 'pontosat-a3f9d2' | '$SPENT_BIN' config"
     [ "$status" -eq 0 ]
 }
 
 @test "slug single character is accepted" {
-    run bash -c "printf '%s\n' 'spent-reports' 'https://reports.example.com' '$SPENT_CACHE_DIR_TEST' 'P' 'p' | '$SPENT_BIN' config"
+    run bash -c "printf '%s\n' 'example.com' '$SPENT_CACHE_DIR_TEST' 'P' 'p' | '$SPENT_BIN' config"
     [ "$status" -eq 0 ]
 }
 

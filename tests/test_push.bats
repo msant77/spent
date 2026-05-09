@@ -22,8 +22,7 @@ teardown() {
 
 configure() {
     printf '%s\n' \
-        "spent-reports" \
-        "https://reports.example.com" \
+        "example.com" \
         "$SPENT_CACHE_DIR_TEST" \
         "Pontosat" \
         "pontosat" \
@@ -111,21 +110,22 @@ slug_file() {
     grep -q '"client":"Pontosat"' "$(slug_file months.json)"
 }
 
-@test "push invokes wrangler with cache dir and project name" {
+@test "push invokes wrangler with slug as project and slug subdir" {
     configure
     write_log .spent-05-2026.log '"1h","dev","","x","04-05-26 09:00","04-05-26 10:00"'
     "$SPENT_BIN" push >/dev/null
     [ -f "$WRANGLER_LOG" ]
     grep -q 'pages deploy' "$WRANGLER_LOG"
-    grep -q -- '--project-name=spent-reports' "$WRANGLER_LOG"
+    grep -q -- '--project-name=pontosat' "$WRANGLER_LOG"
+    grep -q "$SPENT_CACHE_DIR_TEST/pontosat" "$WRANGLER_LOG"
 }
 
-@test "push prints public URL on success" {
+@test "push prints subdomain URL on success" {
     configure
     write_log .spent-05-2026.log '"1h","dev","","x","04-05-26 09:00","04-05-26 10:00"'
     run "$SPENT_BIN" push
     [ "$status" -eq 0 ]
-    [[ "$output" == *"https://reports.example.com/pontosat/"* ]]
+    [[ "$output" == *"https://pontosat.example.com/"* ]]
 }
 
 # --- csv-to-json edge cases -----------------------------------------------
