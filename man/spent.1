@@ -140,11 +140,13 @@ into
 .Pa <cache>/<slug>/ ,
 writes an empty
 .Pa months.json ,
-and runs
+runs
+.Sy "wrangler pages project create <slug> --production-branch=main"
+.Po idempotent \(em an existing project is left alone Pc ,
+and finally
 .Sy "wrangler pages deploy <cache>/<slug> --project-name=<slug> --branch=main"
 so the page is live before any data has been pushed.
-The Pages project is created on first deploy if it does not exist; the
-custom domain
+The custom domain
 .Po Sy <slug>.<parent> Pc
 must be bound once in the Cloudflare dashboard
 .Po Pages -> <slug> -> Custom domains Pc .

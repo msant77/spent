@@ -77,9 +77,10 @@ JSON files are uploaded via `wrangler`.
 Prerequisites:
 
 - `wrangler` (`npm install -g wrangler`) and a `wrangler login` session.
-- A parent domain on Cloudflare (e.g. `marcosantana.dev`). The Pages project for
-  each folder is created automatically on first deploy; you bind the
-  `<slug>.<parent>` custom domain once in the Cloudflare dashboard.
+- A parent domain on Cloudflare (e.g. `marcosantana.dev`). `spent config`
+  bootstraps the Pages project for each folder by running
+  `wrangler pages project create <slug> --production-branch=main`; you bind
+  the `<slug>.<parent>` custom domain once in the Cloudflare dashboard.
 
 One-time per folder:
 
