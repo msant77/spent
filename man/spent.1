@@ -118,12 +118,19 @@ It writes two files
 .Po both with mode 0600 Pc :
 a global file at
 .Pa ~/.config/spent/site.conf
-holding the Cloudflare Pages project name, public URL base, and local
-cache directory; and a per-folder file at
+holding the parent domain
+.Po e.g.\& Sy marcosantana.dev Pc
+and the local cache directory; and a per-folder file at
 .Pa ./.spent-config
-holding the client display name and URL slug.
-On first run it prompts for both layers; on subsequent runs in a new
-folder it only prompts for the per-folder values.
+holding the client display name and slug.
+The slug doubles as the Cloudflare Pages project name and the
+subdomain label, so the published URL is
+.Sy https://<slug>.<parent>/
+.Pp
+On first run
+.Nm
+prompts for both layers; on subsequent runs in a new folder it only
+prompts for the per-folder values.
 .Pp
 After the config files are written
 .Nm
@@ -134,8 +141,14 @@ into
 writes an empty
 .Pa months.json ,
 and runs
-.Sy "wrangler pages deploy"
+.Sy "wrangler pages deploy <cache>/<slug> --project-name=<slug> --branch=main"
 so the page is live before any data has been pushed.
+The Pages project is created on first deploy if it does not exist; the
+custom domain
+.Po Sy <slug>.<parent> Pc
+must be bound once in the Cloudflare dashboard
+.Po Pages -> <slug> -> Custom domains Pc .
+.Pp
 If
 .Sy wrangler
 is not installed or not logged in, the deploy step is skipped with a
@@ -172,10 +185,12 @@ requires
 .Sy wrangler
 to be installed and logged in.
 After updating the JSON files locally it runs
-.Sy "wrangler pages deploy <cache> --project-name=<proj> --branch=main"
+.Sy "wrangler pages deploy <cache>/<slug> --project-name=<slug> --branch=main"
 to publish.
-Wrangler diffs internally, so unchanged files are not re-uploaded
-over the wire.
+Only this folder's slug subtree is deployed — sibling slugs in the
+cache stay untouched.
+Wrangler diffs internally, so unchanged files in this slug are not
+re-uploaded over the wire.
 .Sh FILES
 .Bl -tag -width Ds
 .It Pa ./.spent-MM-YYYY.log
@@ -183,8 +198,9 @@ Per-folder, per-month CSV log written in the current working directory.
 .It Pa ./.spent-config
 Per-folder publishing config: client display name and URL slug.
 .It Pa ~/.config/spent/site.conf
-Global publishing config: Cloudflare Pages project name, public URL
-base, and local cache directory.
+Global publishing config: parent domain
+.Po e.g.\& Sy marcosantana.dev Pc
+and local cache directory.
 .It Pa ~/.local/share/spent/site/<slug>/
 Local cache mirroring what is deployed to Pages.
 Contains

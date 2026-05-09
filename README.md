@@ -70,16 +70,16 @@ Bash 3.2 compatible. macOS-only (uses BSD `date -j`).
 ## Publishing reports
 
 `spent` can publish a per-customer web page that reads the same `.spent-MM-YYYY.log`
-files this folder already produces. The page is served from a Cloudflare Pages
-project (set up once) and is updated by uploading JSON files via `wrangler` —
-no git repo is involved.
+files this folder already produces. **Each folder maps to its own Cloudflare Pages
+project at its own subdomain** — `https://<slug>.<parent>/`. No git repo is involved;
+JSON files are uploaded via `wrangler`.
 
 Prerequisites:
 
 - `wrangler` (`npm install -g wrangler`) and a `wrangler login` session.
-- A Cloudflare Pages project (e.g. `spent-reports`) with a custom domain bound
-  (e.g. `reports.marcosantana.dev`). Create this in the Cloudflare dashboard
-  or with `wrangler pages project create`.
+- A parent domain on Cloudflare (e.g. `marcosantana.dev`). The Pages project for
+  each folder is created automatically on first deploy; you bind the
+  `<slug>.<parent>` custom domain once in the Cloudflare dashboard.
 
 One-time per folder:
 
@@ -87,18 +87,21 @@ One-time per folder:
 spent config
 ```
 
-This prompts for:
+This prompts for (first run only for the global pair):
 
-- **Cloudflare Pages project name** — global, asked once
-- **Public URL base** — e.g. `https://reports.marcosantana.dev`
-- **Cache directory** — defaults to `~/.local/share/spent/site/`
+- **Parent domain** — e.g. `marcosantana.dev` (global, asked once)
+- **Cache directory** — defaults to `~/.local/share/spent/site/` (global)
 - **Client display name** — used as the page title (per-folder)
-- **URL slug** — the path under the domain (per-folder)
+- **Subdomain label / slug** — also doubles as the Pages project name and the
+  cache subdir name. Defaults to the folder basename (slugified). Must match
+  `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`.
 
 `spent config` writes `~/.config/spent/site.conf` (global) and `./.spent-config`
 (per-folder), both with mode 0600. It then copies the bundled HTML template
 into `<cache>/<slug>/`, writes an empty `months.json`, and runs
-`wrangler pages deploy` so the page is live immediately.
+`wrangler pages deploy <cache>/<slug> --project-name=<slug>` so the page is live
+immediately. After the first deploy you bind `<slug>.<parent>` to the project in
+the Cloudflare dashboard (Pages → `<slug>` → Custom domains).
 
 Inspect the current config:
 
@@ -119,9 +122,10 @@ spent push
 ```
 
 `spent push` reads every `.spent-*.log` in the current folder, converts each
-to a `<YYYY-MM>.json` under the slug's cache dir, refreshes `months.json`,
-and re-runs `wrangler pages deploy`. Wrangler diffs internally so unchanged
-files don't cross the wire.
+to a `<YYYY-MM>.json` under `<cache>/<slug>/`, refreshes `months.json`, and
+re-runs `wrangler pages deploy <cache>/<slug> --project-name=<slug>`. Only this
+folder's slug subtree is deployed — sibling slugs stay untouched. Wrangler
+diffs internally so unchanged files don't cross the wire.
 
 The page fetches `months.json` on load and a per-month `<YYYY-MM>.json` when
 the visitor picks a tab. The static template stays in place — only the JSON
